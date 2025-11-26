@@ -99,7 +99,7 @@ importers:
         specifier: ^10.4.20
         version: 10.4.20(postcss@8.5.0)
       better-sqlite3:
-        specifier: latest
+        specifier: 12.4.6
         version: 12.4.6
       class-variance-authority:
         specifier: ^0.7.1

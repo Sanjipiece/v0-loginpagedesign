@@ -1,56 +1,88 @@
-import Database from "better-sqlite3"
+import fs from "fs"
 import path from "path"
 
-let db: Database.Database
-
-function getDatabase() {
-  if (!db) {
-    const dbPath = path.join(process.cwd(), "data", "app.db")
-    db = new Database(dbPath)
-    db.pragma("journal_mode = WAL")
-  }
-  return db
-}
+const DATA_DIR = "/tmp"
+const DATA_FILE = path.join(DATA_DIR, "users.json")
 
 export function initDatabase() {
-  const database = getDatabase()
-  const schema = `
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT NOT NULL UNIQUE,
-      password TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    
-    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-  `
+  ensureDataFile()
+}
 
-  database.exec(schema)
+function ensureDataFile() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) {
+      fs.writeFileSync(DATA_FILE, JSON.stringify([], null, 2))
+    }
+  } catch (error) {
+    console.error("[v0] Error ensuring data file:", error)
+  }
+}
+
+function readUsers() {
+  try {
+    ensureDataFile()
+    const data = fs.readFileSync(DATA_FILE, "utf-8")
+    return JSON.parse(data)
+  } catch (error) {
+    console.error("[v0] Error reading users:", error)
+    return []
+  }
+}
+
+function writeUsers(users: any[]) {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2))
+  } catch (error) {
+    console.error("[v0] Error writing users:", error)
+  }
 }
 
 export function saveUser(email: string, password: string) {
-  const database = getDatabase()
-  const stmt = database.prepare("INSERT INTO users (email, password) VALUES (?, ?)")
-
   try {
-    stmt.run(email, password)
+    const users = readUsers()
+
+    // Check if email already exists
+    if (users.some((u: any) => u.email === email)) {
+      return { success: false, error: "البريد الإلكتروني مسجل بالفعل" }
+    }
+
+    const newUser = {
+      id: users.length + 1,
+      email,
+      password,
+      created_at: new Date().toISOString(),
+    }
+
+    users.push(newUser)
+    writeUsers(users)
+
     return { success: true }
   } catch (error: any) {
-    if (error.message.includes("UNIQUE constraint failed")) {
-      return { success: false, error: "Email already registered" }
-    }
-    return { success: false, error: error.message }
+    console.error("[v0] Error saving user:", error)
+    return { success: false, error: "حدث خطأ في حفظ البيانات" }
   }
 }
 
 export function getUser(email: string) {
-  const database = getDatabase()
-  const stmt = database.prepare("SELECT * FROM users WHERE email = ?")
-  return stmt.get(email)
+  try {
+    const users = readUsers()
+    return users.find((u: any) => u.email === email)
+  } catch (error) {
+    console.error("[v0] Error getting user:", error)
+    return null
+  }
 }
 
 export function getAllUsers() {
-  const database = getDatabase()
-  const stmt = database.prepare("SELECT id, email, created_at FROM users ORDER BY created_at DESC")
-  return stmt.all()
+  try {
+    const users = readUsers()
+    return users.map((u: any) => ({
+      id: u.id,
+      email: u.email,
+      created_at: u.created_at,
+    }))
+  } catch (error) {
+    console.error("[v0] Error getting all users:", error)
+    return []
+  }
 }
